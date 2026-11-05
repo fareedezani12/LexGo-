@@ -1,9 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:typed_data';
 
 import 'package:lexgo/handwriting_screen.dart';
 import 'package:lexgo/main.dart';
+
+import 'support/memory_handwriting_sample_store.dart';
 
 const _canvasSizeKey = ValueKey('canvas_size');
 const _undoButtonKey = ValueKey('undo_button');
@@ -19,7 +22,9 @@ const _previewInkLayerKey = ValueKey('preview_ink_layer');
 
 void main() {
   testWidgets('Start writing opens the handwriting canvas', (tester) async {
-    await tester.pumpWidget(const LexGoApp());
+    await tester.pumpWidget(
+      LexGoApp(repository: MemoryHandwritingSampleStore()),
+    );
 
     await tester.tap(find.text('Start writing'));
     await tester.pumpAndSettle();
@@ -34,8 +39,63 @@ void main() {
     expect(find.text('Submit'), findsOneWidget);
   });
 
+  testWidgets('dashboard adapts to phone, tablet, and desktop widths', (
+    tester,
+  ) async {
+    const sizes = [
+      Size(390, 844),
+      Size(768, 1024),
+      Size(1440, 900),
+    ];
+
+    for (final size in sizes) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        LexGoApp(repository: MemoryHandwritingSampleStore()),
+      );
+
+      expect(find.text('Get started'), findsOneWidget);
+      expect(find.text('Upload an image'), findsWidgets);
+      expect(tester.takeException(), isNull, reason: 'Dashboard at $size');
+    }
+
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('recent work shows an inviting empty state without sample data', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LexGoApp(repository: MemoryHandwritingSampleStore()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your first page starts here'), findsOneWidget);
+    expect(find.text('Start writing'), findsWidgets);
+    expect(find.textContaining('samples'), findsNothing);
+  });
+
+  testWidgets('recent work lists saved handwriting from the repository', (
+    tester,
+  ) async {
+    final repository = MemoryHandwritingSampleStore()
+      ..addSample(
+        id: 'dashboard-recent',
+        title: 'My latest practice',
+        imageBytes: Uint8List.fromList([1, 2, 3]),
+      );
+    await tester.pumpWidget(LexGoApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('My latest practice'), findsOneWidget);
+    expect(find.text('1 saved'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'My writing'), findsOneWidget);
+  });
+
   testWidgets('Handwriting card opens the same screen', (tester) async {
-    await tester.pumpWidget(const LexGoApp());
+    await tester.pumpWidget(
+      LexGoApp(repository: MemoryHandwritingSampleStore()),
+    );
 
     await tester.ensureVisible(find.text('Handwriting').first);
     await tester.tap(find.text('Handwriting').first);
@@ -110,7 +170,7 @@ void main() {
     expect(find.text('Writing preview'), findsOneWidget);
     expect(
       find.text(
-        'This is a visual preview. Handwriting recognition is not connected.',
+        'Submit this PNG to save it and recognize the handwriting.',
       ),
       findsOneWidget,
     );
